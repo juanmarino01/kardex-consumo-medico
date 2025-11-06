@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kardex Consumo Médico</title>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <!-- jsPDF para generar reportes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        /* [Todos los estilos anteriores se mantienen igual] */
+        :root {
+            --primary: #3498db;
+            --secondary: #2ecc71;
+            --danger: #e74c3c;
+            --warning: #f39c12;
+            --light: #f8f9fa;
+            --dark: #343a40;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background-color: var(--primary);
+            color: white;
+            padding: 15px 0;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        h1 {
+            font-size: 1.8rem;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+        
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button.secondary {
+            background-color: var(--secondary);
+        }
+        
+        button.secondary:hover {
+            background-color: #27ae60;
+        }
+        
+        button.danger {
+            background-color: var(--danger);
+        }
+        
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn-group button {
+            flex: 1;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab.active {
+            border-bottom: 3px solid var(--primary);
+            font-weight: bold;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .medicamento-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            transition: background-color 0.3s;
+        }
+        
+        .medicamento-item:hover {
+            background-color: #f9f9f9;
+        }
+        
+        .medicamento-info {
+            flex: 1;
+        }
+        
+        .medicamento-nombre {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        
+        .medicamento-dosis {
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .medicamento-fecha {
+            color: #888;
+            font-size: 0.9rem;
+        }
+        
+        .medicamento-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .consumido {
+            text-decoration: line-through;
+            color: #999;
+        }
+        
+        .consumido-checkbox {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .filters input, .filters select {
+            flex: 1;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #888;
+        }
+        
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        @media (max-width: 768px) {
+            .filters {
+                flex-direction: column;
+            }
+            
+            .medicamento-item {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .medicamento-actions {
+                margin-top: 10px;
+                width: 100%;
+                justify-content: space-between;
+            }
+            
+            .btn-group {
+                flex-direction: column;
+            }
+        }
+        
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 4px;
+            color: white;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            transition: transform 0.3s, opacity 0.3s;
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        
+        .notification.success {
+            background-color: var(--secondary);
+        }
+        
+        .notification.error {
+            background-color: var(--danger);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <h1>Kardex Consumo Médico</h1>
+                <button id="generarPdf" class="secondary">Generar Reporte PDF</button>
+            </div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div class="tabs">
+            <div class="tab active" data-tab="registro">Registrar Medicamento</div>
+            <div class="tab" data-tab="lista">Lista de Medicamentos</div>
+        </div>
+        
+        <div class="tab-content active" id="registro-tab">
+            <div class="card">
+                <h2>Registrar Nuevo Medicamento</h2>
+                <form id="medicamentoForm">
+                    <div class="form-group">
+                        <label for="nombre">Nombre del Medicamento</label>
+                        <input type="text" id="nombre" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="dosis">Dosis</label>
+                        <input type="text" id="dosis" placeholder="Ej: 1 tableta cada 8 horas" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fecha">Fecha de Inicio</label>
+                        <input type="date" id="fecha" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="horarios">Horarios (separados por coma)</label>
+                        <input type="text" id="horarios" placeholder="Ej: 08:00, 14:00, 20:00">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="observaciones">Observaciones</label>
+                        <textarea id="observaciones" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button type="submit" id="guardarBtn">Guardar Medicamento</button>
+                        <button type="button" id="limpiarBtn" class="secondary">Limpiar Formulario</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <div class="tab-content" id="lista-tab">
+            <div class="card">
+                <h2>Lista de Medicamentos</h2>
+                
+                <div class="filters">
+                    <input type="date" id="filtroFecha" placeholder="Filtrar por fecha">
+                    <select id="filtroEstado">
+                        <option value="todos">Todos los estados</option>
+                        <option value="pendientes">Solo pendientes</option>
+                        <option value="consumidos">Solo consumidos</option>
+                    </select>
+                </div>
+                
+                <div id="listaMedicamentos">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Cargando medicamentos...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // 🔥 CONFIGURACIÓN DE FIREBASE - REEMPLAZA CON TUS DATOS REALES
+        const firebaseConfig = {
+            apiKey: "AIzaSyDQyNZIKuW5fTnTDRu5NDGiJmNG3pb7fkI",
+            authDomain: "kardex-consumo-medico.firebaseapp.com",
+            projectId: "kardex-consumo-medico",
+            storageBucket: "kardex-consumo-medico.firebasestorage.app",
+            messagingSenderId: "459788457807",
+            appId: "1:459788457807:web:61d93270fefa8871fb573a"
+        };
+        
+        // Inicializar Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        
+        // Referencias a elementos del DOM
+        const medicamentoForm = document.getElementById('medicamentoForm');
+        const listaMedicamentos = document.getElementById('listaMedicamentos');
+        const filtroFecha = document.getElementById('filtroFecha');
+        const filtroEstado = document.getElementById('filtroEstado');
+        const generarPdfBtn = document.getElementById('generarPdf');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const notification = document.getElementById('notification');
+        
+        // Variables globales
+        let medicamentos = [];
+        let editandoId = null;
+        
+        // Establecer fecha actual por defecto
+        document.getElementById('fecha').valueAsDate = new Date();
+        
+        // Funciones de utilidad
+        function mostrarNotificacion(mensaje, tipo = 'success') {
+            notification.textContent = mensaje;
+            notification.className = `notification ${tipo} show`;
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
+        }
+        
+        function formatearFecha(fecha) {
+            const opciones = { year: 'numeric', month: 'long', day: 'numeric' };
+            return new Date(fecha).toLocaleDateString('es-ES', opciones);
+        }
+        
+        // Funciones de Firebase
+        async function guardarMedicamento(medicamento) {
+            try {
+                if (editandoId) {
+                    await db.collection('medicamentos').doc(editandoId).update(medicamento);
+                    mostrarNotificacion('Medicamento actualizado correctamente');
+                } else {
+                    await db.collection('medicamentos').add({
+                        ...medicamento,
+                        fechaRegistro: new Date(),
+                        consumido: false
+                    });
+                    mostrarNotificacion('Medicamento guardado correctamente');
+                }
+                
+                medicamentoForm.reset();
+                editandoId = null;
+                document.getElementById('fecha').valueAsDate = new Date();
+                cargarMedicamentos();
+            } catch (error) {
+                console.error('Error al guardar medicamento:', error);
+                mostrarNotificacion('Error al guardar el medicamento', 'error');
+            }
+        }
+        
+        async function cargarMedicamentos() {
+            try {
+                listaMedicamentos.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>Cargando medicamentos...</p>
+                    </div>
+                `;
+                
+                const snapshot = await db.collection('medicamentos').orderBy('fechaRegistro', 'desc').get();
+                medicamentos = [];
+                
+                snapshot.forEach(doc => {
+                    medicamentos.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+                
+                mostrarMedicamentos();
+            } catch (error) {
+                console.error('Error al cargar medicamentos:', error);
+                mostrarNotificacion('Error al cargar los medicamentos', 'error');
+            }
+        }
+        
+        async function eliminarMedicamento(id) {
+            if (confirm('¿Estás seguro de que quieres eliminar este medicamento?')) {
+                try {
+                    await db.collection('medicamentos').doc(id).delete();
+                    mostrarNotificacion('Medicamento eliminado correctamente');
+                    cargarMedicamentos();
+                } catch (error) {
+                    console.error('Error al eliminar medicamento:', error);
+                    mostrarNotificacion('Error al eliminar el medicamento', 'error');
+                }
+            }
+        }
+        
+        async function toggleConsumido(id, estado) {
+            try {
+                await db.collection('medicamentos').doc(id).update({
+                    consumido: estado
+                });
+                
+                cargarMedicamentos();
+            } catch (error) {
+                console.error('Error al actualizar estado:', error);
+                mostrarNotificacion('Error al actualizar el estado', 'error');
+            }
+        }
+        
+        // Funciones de UI
+        function mostrarMedicamentos() {
+            let fechaFiltro = filtroFecha.value;
+            let estadoFiltro = filtroEstado.value;
+            
+            let medicamentosFiltrados = medicamentos;
+            
+            if (fechaFiltro) {
+                medicamentosFiltrados = medicamentosFiltrados.filter(m => m.fecha === fechaFiltro);
+            }
+            
+            if (estadoFiltro === 'pendientes') {
+                medicamentosFiltrados = medicamentosFiltrados.filter(m => !m.consumido);
+            } else if (estadoFiltro === 'consumidos') {
+                medicamentosFiltrados = medicamentosFiltrados.filter(m => m.consumido);
+            }
+            
+            if (medicamentosFiltrados.length === 0) {
+                listaMedicamentos.innerHTML = `
+                    <div class="empty-state">
+                        <i>💊</i>
+                        <p>No se encontraron medicamentos</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            listaMedicamentos.innerHTML = '';
+            
+            medicamentosFiltrados.forEach(medicamento => {
+                const item = document.createElement('div');
+                item.className = `medicamento-item ${medicamento.consumido ? 'consumido' : ''}`;
+                
+                item.innerHTML = `
+                    <div class="medicamento-info">
+                        <div class="medicamento-nombre">${medicamento.nombre}</div>
+                        <div class="medicamento-dosis">${medicamento.dosis}</div>
+                        <div class="medicamento-fecha">${formatearFecha(medicamento.fecha)}</div>
+                        ${medicamento.horarios ? `<div class="medicamento-horarios">Horarios: ${medicamento.horarios}</div>` : ''}
+                        ${medicamento.observaciones ? `<div class="medicamento-observaciones">${medicamento.observaciones}</div>` : ''}
+                    </div>
+                    <div class="medicamento-actions">
+                        <input type="checkbox" class="consumido-checkbox" ${medicamento.consumido ? 'checked' : ''} 
+                            onchange="toggleConsumido('${medicamento.id}', this.checked)">
+                        <button onclick="editarMedicamento('${medicamento.id}')" class="secondary">Editar</button>
+                        <button onclick="eliminarMedicamento('${medicamento.id}')" class="danger">Eliminar</button>
+                    </div>
+                `;
+                
+                listaMedicamentos.appendChild(item);
+            });
+        }
+        
+        function editarMedicamento(id) {
+            const medicamento = medicamentos.find(m => m.id === id);
+            
+            if (medicamento) {
+                document.getElementById('nombre').value = medicamento.nombre;
+                document.getElementById('dosis').value = medicamento.dosis;
+                document.getElementById('fecha').value = medicamento.fecha;
+                document.getElementById('horarios').value = medicamento.horarios || '';
+                document.getElementById('observaciones').value = medicamento.observaciones || '';
+                
+                editandoId = id;
+                
+                // Cambiar a la pestaña de registro
+                cambiarTab('registro');
+                
+                // Desplazarse al formulario
+                document.getElementById('medicamentoForm').scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+        
+        function cambiarTab(tabName) {
+            tabs.forEach(tab => {
+                if (tab.dataset.tab === tabName) {
+                    tab.classList.add('active');
+                } else {
+                    tab.classList.remove('active');
+                }
+            });
+            
+            tabContents.forEach(content => {
+                if (content.id === `${tabName}-tab`) {
+                    content.classList.add('active');
+                } else {
+                    content.classList.remove('active');
+                }
+            });
+        }
+        
+        function generarPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            // Título
+            doc.setFontSize(20);
+            doc.text('Reporte de Consumo Médico', 20, 20);
+            
+            // Fecha de generación
+            doc.setFontSize(12);
+            doc.text(`Generado el: ${new Date().toLocaleDateString('es-ES')}`, 20, 30);
+            
+            // Tabla de medicamentos
+            const tableColumn = ["Medicamento", "Dosis", "Fecha", "Estado"];
+            const tableRows = [];
+            
+            medicamentos.forEach(medicamento => {
+                const estado = medicamento.consumido ? "Consumido" : "Pendiente";
+                const medicamentoData = [
+                    medicamento.nombre,
+                    medicamento.dosis,
+                    formatearFecha(medicamento.fecha),
+                    estado
+                ];
+                tableRows.push(medicamentoData);
+            });
+            
+            doc.autoTable({
+                head: [tableColumn],
+                body: tableRows,
+                startY: 40,
+                styles: { fontSize: 10 },
+                headStyles: { fillColor: [52, 152, 219] }
+            });
+            
+            // Guardar el PDF
+            doc.save('reporte-consumo-medico.pdf');
+        }
+        
+        // Event Listeners
+        medicamentoForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const medicamento = {
+                nombre: document.getElementById('nombre').value,
+                dosis: document.getElementById('dosis').value,
+                fecha: document.getElementById('fecha').value,
+                horarios: document.getElementById('horarios').value,
+                observaciones: document.getElementById('observaciones').value
+            };
+            
+            guardarMedicamento(medicamento);
+        });
+        
+        document.getElementById('limpiarBtn').addEventListener('click', () => {
+            medicamentoForm.reset();
+            document.getElementById('fecha').valueAsDate = new Date();
+            editandoId = null;
+        });
+        
+        filtroFecha.addEventListener('change', mostrarMedicamentos);
+        filtroEstado.addEventListener('change', mostrarMedicamentos);
+        
+        generarPdfBtn.addEventListener('click', generarPDF);
+        
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                cambiarTab(tab.dataset.tab);
+            });
+        });
+        
+        // Inicializar la aplicación
+        cargarMedicamentos();
+    </script>
+</body>
+</html>
